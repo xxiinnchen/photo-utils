@@ -15,20 +15,21 @@ def debug_print(*args, **kwargs):
         print(*args, **kwargs)
 
 def get_date_taken(image_path):
-    """Get the date when the photo was taken using exiftool."""
-    try:
-        # Run exiftool to get DateTimeOriginal
-        result = subprocess.run(
-            ['exiftool', '-DateTimeOriginal', '-d', '%Y:%m:%d %H:%M:%S', str(image_path)],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0 and result.stdout:
-            # Extract date from output
-            date_str = result.stdout.split(': ')[1].strip()
-            return datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
-    except Exception as e:
-        debug_print(f"Error reading EXIF data from {image_path}: {e}")
+    """Get the date when the photo/video was taken using exiftool."""
+    # MP4s often lack DateTimeOriginal; fall back to CreateDate
+    tags = ['-DateTimeOriginal', '-CreateDate']
+    for tag in tags:
+        try:
+            result = subprocess.run(
+                ['exiftool', tag, '-d', '%Y:%m:%d %H:%M:%S', str(image_path)],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                date_str = result.stdout.split(': ')[1].strip()
+                return datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+        except Exception as e:
+            debug_print(f"Error reading EXIF data from {image_path}: {e}")
     return None
 
 def organize_dng_files(source_dir, debug=False, tag=None):
@@ -38,7 +39,9 @@ def organize_dng_files(source_dir, debug=False, tag=None):
     source_path = Path(source_dir)
     debug_print(f"Processing directory: {source_path}")
 
-    files = list(source_path.glob("*.DNG")) + list(source_path.glob("*.JPG")) + list(source_path.glob("*.jpg")) + list(source_path.glob("*.dng"))
+    files = (list(source_path.glob("*.DNG")) + list(source_path.glob("*.dng"))
+             + list(source_path.glob("*.JPG")) + list(source_path.glob("*.jpg"))
+             + list(source_path.glob("*.MP4")) + list(source_path.glob("*.mp4")))
 
     for file_path in files:
         if not file_path.is_file():  # Skip if not a file
@@ -110,7 +113,7 @@ def check_exiftool():
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Organize DNG files into directories based on creation date.'
+        description='Organize DNG/JPG/MP4 files into directories based on creation date.'
     )
     parser.add_argument(
         'source_dir',
